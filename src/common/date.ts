@@ -11,7 +11,7 @@ export function isDateBefore(timestampA: TimeStamp, timestampB: TimeStamp, optio
   const realTimestampB = isNumber(timestampB)
     ? (timestampB as number) * (options?.unit === "s" ? 1000 : 1)
     : timestampB;
-  return new Date(timestampA).getTime() <= realTimestampB;
+  return new Date(timestampA).getTime() <= Number(realTimestampB);
 }
 
 /** A must be milliseconds */
@@ -19,7 +19,7 @@ export function isDateAfter(timestampA: TimeStamp, timestampB: TimeStamp, option
   const realTimestampB = isNumber(timestampB)
     ? (timestampB as number) * (options?.unit === "s" ? 1000 : 1)
     : timestampB;
-  return new Date(timestampA).getTime() > realTimestampB;
+  return new Date(timestampA).getTime() > Number(realTimestampB);
 }
 
 export function offsetDateTime(

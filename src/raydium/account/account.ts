@@ -181,7 +181,7 @@ export default class Account extends ModuleBase {
     account?: PublicKey;
     instructionParams?: AddInstructionParam;
   }> {
-    await this.fetchWalletTokenAccounts();
+    console.time('getOrCreateTokenAccount-total');
     const {
       mint,
       createInfo,
@@ -191,17 +191,74 @@ export default class Account extends ModuleBase {
       skipCloseAccount = false,
       checkCreateATAOwner = false,
       assignSeed,
+      forceAccountCloseIfBalance,
     } = params;
     const tokenProgram = new PublicKey(params.tokenProgram || TOKEN_PROGRAM_ID);
+    
+    console.time('derive-associated-token-account');
     const ata = this.getAssociatedTokenAccount(mint, new PublicKey(tokenProgram));
-    const accounts = (notUseTokenAccount ? [] : this.tokenAccountRawInfos)
-      .filter((i) => i.accountInfo.mint.equals(mint) && (!associatedOnly || i.pubkey.equals(ata)))
-      .sort((a, b) => (a.accountInfo.amount.lt(b.accountInfo.amount) ? 1 : -1));
-    // find token or don't need create
-    if (createInfo === undefined || accounts.length > 0) {
-      return accounts.length > 0 ? { account: accounts[0].pubkey } : {};
+    console.timeEnd('derive-associated-token-account');
+
+    // await this.fetchWalletTokenAccounts();
+
+    // const accounts = (notUseTokenAccount ? [] : this.tokenAccountRawInfos)
+    //   .filter((i) => i.accountInfo.mint.equals(mint) && (!associatedOnly || i.pubkey.equals(ata)))
+    //   .sort((a, b) => (a.accountInfo.amount.lt(b.accountInfo.amount) ? 1 : -1));
+    // // find token or don't need create
+    // if (createInfo === undefined || accounts.length > 0) {
+    //   return accounts.length > 0 ? { account: accounts[0].pubkey } : {};
+    // }
+
+    // Only check the specific ATA account
+    console.time('get-ata-info');
+    const ataInfo = notUseTokenAccount ? null : await this.scope.connection.getAccountInfo(ata);
+    console.timeEnd('get-ata-info');
+
+    // If account exists and matches requirements, check for force close
+    console.time('decode-and-validate');
+    if (ataInfo !== null) {
+      const decodedData = AccountLayout.decode(ataInfo.data);
+      const isValid = ataInfo.owner.equals(tokenProgram) &&
+        decodedData.mint.equals(mint) &&
+        decodedData.owner.equals(this.scope.ownerPubKey);
+
+      if (isValid) {
+        if (forceAccountCloseIfBalance !== undefined &&
+          !mint.equals(WSOLMint) &&
+          decodedData.amount.toString() === forceAccountCloseIfBalance.toString()) {
+          console.timeEnd('decode-and-validate');
+          console.timeEnd('getOrCreateTokenAccount-total');
+          return {
+            account: ata,
+            instructionParams: {
+              instructions: [],
+              endInstructions: [
+                closeAccountInstruction({
+                  owner: this.scope.ownerPubKey,
+                  payer: this.scope.ownerPubKey,
+                  tokenAccount: ata,
+                  programId: tokenProgram
+                })
+              ],
+              signers: [],
+              instructionTypes: [],
+              endInstructionTypes: [InstructionType.CloseAccount]
+            }
+          };
+        }
+        console.timeEnd('decode-and-validate');
+        console.timeEnd('getOrCreateTokenAccount-total');
+        return { account: ata };
+      }
+    }
+    console.timeEnd('decode-and-validate');
+
+    if (createInfo === undefined) {
+      console.timeEnd('getOrCreateTokenAccount-total');
+      return {}
     }
 
+    console.time('create-instructions');
     const newTxInstructions: AddInstructionParam = {
       instructions: [],
       endInstructions: [],
@@ -270,6 +327,8 @@ export default class Account extends ModuleBase {
         newTxInstructions.endInstructionTypes!.push(InstructionType.CloseAccount);
       }
 
+      console.timeEnd('create-instructions');
+      console.timeEnd('getOrCreateTokenAccount-total');
       return { account: ata, instructionParams: newTxInstructions };
     } else {
       const newTokenAccount = generatePubKey({ fromPublicKey: owner, programId: tokenProgram, assignSeed });
@@ -307,6 +366,8 @@ export default class Account extends ModuleBase {
         );
         newTxInstructions.endInstructionTypes!.push(InstructionType.CloseAccount);
       }
+      console.timeEnd('create-instructions');
+      console.timeEnd('getOrCreateTokenAccount-total');
       return { account: newTokenAccount.publicKey, instructionParams: newTxInstructions };
     }
     // }

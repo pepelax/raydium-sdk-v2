@@ -54,4 +54,5 @@ export interface GetOrCreateTokenAccountParams {
   tokenProgram?: PublicKey | string;
   checkCreateATAOwner?: boolean;
   assignSeed?: string;
+  forceAccountCloseIfBalance?: BigNumberish;
 }
