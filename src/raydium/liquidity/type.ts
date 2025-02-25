@@ -276,6 +276,7 @@ export interface SwapParam<T = TxVersion.LEGACY> {
     associatedOnly?: boolean;
     inputUseSolBalance?: boolean;
     outputUseSolBalance?: boolean;
+    sniperMode?:boolean;
   };
   computeBudgetConfig?: ComputeBudgetConfig;
   txVersion?: T;

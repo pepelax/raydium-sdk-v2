@@ -55,4 +55,5 @@ export interface GetOrCreateTokenAccountParams {
   checkCreateATAOwner?: boolean;
   assignSeed?: string;
   forceAccountCloseIfBalance?: BigNumberish;
+  sniperMode?: boolean;
 }

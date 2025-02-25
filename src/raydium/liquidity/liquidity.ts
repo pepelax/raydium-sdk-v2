@@ -1273,7 +1273,7 @@ export default class LiquidityModule extends ModuleBase {
     feePayer,
   }: SwapParam<T>): Promise<MakeTxData<T>> {
     const txBuilder = this.createTxBuilder(feePayer);
-    const { associatedOnly = true, inputUseSolBalance = true, outputUseSolBalance = true } = config || {};
+    const { associatedOnly = true, inputUseSolBalance = true, outputUseSolBalance = true, sniperMode = false } = config || {};
 
     const [tokenIn, tokenOut] =
       inputMint === poolInfo.mintA.address ? [poolInfo.mintA, poolInfo.mintB] : [poolInfo.mintB, poolInfo.mintA];
@@ -1297,6 +1297,7 @@ export default class LiquidityModule extends ModuleBase {
         notUseTokenAccount: inputTokenUseSolBalance,
         associatedOnly: associatedOnly,
         forceAccountCloseIfBalance: amountIn,
+        sniperMode: sniperMode,
       });
     txBuilder.addInstruction(ownerTokenAccountBaseInstruction || {});
 
@@ -1320,6 +1321,7 @@ export default class LiquidityModule extends ModuleBase {
         skipCloseAccount: !outputTokenUseSolBalance,
         notUseTokenAccount: outputTokenUseSolBalance,
         associatedOnly: outputTokenUseSolBalance ? false : associatedOnly,
+        sniperMode: sniperMode,
       });
     txBuilder.addInstruction(ownerTokenAccountQuoteInstruction || {});
     if (_tokenAccountOut === undefined)
@@ -1332,7 +1334,7 @@ export default class LiquidityModule extends ModuleBase {
 
     const poolKeys = propPoolKeys || (await this.getAmmPoolKeys(poolInfo.id));
     let version = 4;
-    if (poolInfo.pooltype.includes("StablePool")) version = 5;
+    if (poolInfo.pooltype.includes("StablePool") || !poolKeys.targetOrders) version = 5;
 
     txBuilder.addInstruction({
       instructions: [

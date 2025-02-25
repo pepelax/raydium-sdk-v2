@@ -192,12 +192,19 @@ export default class Account extends ModuleBase {
       checkCreateATAOwner = false,
       assignSeed,
       forceAccountCloseIfBalance,
+      sniperMode = false,
     } = params;
     const tokenProgram = new PublicKey(params.tokenProgram || TOKEN_PROGRAM_ID);
-    
+
     console.time('derive-associated-token-account');
     const ata = this.getAssociatedTokenAccount(mint, new PublicKey(tokenProgram));
     console.timeEnd('derive-associated-token-account');
+
+    if (sniperMode && mint.equals(WSOLMint))
+    {
+      console.timeEnd('getOrCreateTokenAccount-total');
+      return { account: ata };
+    }
 
     // await this.fetchWalletTokenAccounts();
 
@@ -211,45 +218,51 @@ export default class Account extends ModuleBase {
 
     // Only check the specific ATA account
     console.time('get-ata-info');
-    const ataInfo = notUseTokenAccount ? null : await this.scope.connection.getAccountInfo(ata);
+    const ataInfo = notUseTokenAccount || sniperMode ? null : await this.scope.connection.getAccountInfo(ata);
     console.timeEnd('get-ata-info');
+
+    let closingRequired = forceAccountCloseIfBalance !== undefined && sniperMode;
+    const ataConfirmed = closingRequired || ataInfo !== null;
 
     // If account exists and matches requirements, check for force close
     console.time('decode-and-validate');
-    if (ataInfo !== null) {
-      const decodedData = AccountLayout.decode(ataInfo.data);
-      const isValid = ataInfo.owner.equals(tokenProgram) &&
-        decodedData.mint.equals(mint) &&
-        decodedData.owner.equals(this.scope.ownerPubKey);
-
-      if (isValid) {
-        if (forceAccountCloseIfBalance !== undefined &&
+    if (ataConfirmed) {
+      if (ataInfo !== null) {
+        const decodedData = AccountLayout.decode(ataInfo.data);
+        const isValid = ataInfo.owner.equals(tokenProgram) &&
+          decodedData.mint.equals(mint) &&
+          decodedData.owner.equals(this.scope.ownerPubKey);
+        
+        closingRequired = isValid &&
+          forceAccountCloseIfBalance !== undefined &&
           !mint.equals(WSOLMint) &&
-          decodedData.amount.toString() === forceAccountCloseIfBalance.toString()) {
-          console.timeEnd('decode-and-validate');
-          console.timeEnd('getOrCreateTokenAccount-total');
-          return {
-            account: ata,
-            instructionParams: {
-              instructions: [],
-              endInstructions: [
-                closeAccountInstruction({
-                  owner: this.scope.ownerPubKey,
-                  payer: this.scope.ownerPubKey,
-                  tokenAccount: ata,
-                  programId: tokenProgram
-                })
-              ],
-              signers: [],
-              instructionTypes: [],
-              endInstructionTypes: [InstructionType.CloseAccount]
-            }
-          };
-        }
+          decodedData.amount.toString() === forceAccountCloseIfBalance.toString();
+      }
+
+      if (closingRequired) {
         console.timeEnd('decode-and-validate');
         console.timeEnd('getOrCreateTokenAccount-total');
-        return { account: ata };
+        return {
+          account: ata,
+          instructionParams: {
+            instructions: [],
+            endInstructions: [
+              closeAccountInstruction({
+                owner: this.scope.ownerPubKey,
+                payer: this.scope.ownerPubKey,
+                tokenAccount: ata,
+                programId: tokenProgram
+              })
+            ],
+            signers: [],
+            instructionTypes: [],
+            endInstructionTypes: [InstructionType.CloseAccount]
+          }
+        };
       }
+      console.timeEnd('decode-and-validate');
+      console.timeEnd('getOrCreateTokenAccount-total');
+      return { account: ata };
     }
     console.timeEnd('decode-and-validate');
 
